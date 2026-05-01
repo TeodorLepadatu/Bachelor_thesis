@@ -1,288 +1,298 @@
-# Criptanaliza cifrului *Speck 32/64* folosind *Rețele Neuronale Convoluționale*
+# Cryptanalysis of the *Speck 32/64* cipher using *Convolutional Neural Networks*
 
-## Descrierea algoritmului de criptare *Speck 32/64*
+## Description of the *Speck 32/64* encryption algorithm
 
-### Parametri
+### Parameters
 
-Speck este un cifru bloc de tip ARX (Addition, Rotation, XOR). 
-* **word size** = 16 biți
-* **block** = $(L,R)$ = cuvântul criptat (care are 32 de biți) este împărțit în două subcuvinte de 16 biți
-* **key** = număr pe 64 de biți
-* **rotations** = numărul de biți rotiți la dreapta sau la stânga în funcția de criptare (valorile default sunt $\alpha = 7$ pentru rotația dreapta pe $L$ și $\beta = 2$ pentru rotația stânga pe $R$)
-* **number of rounds** = numărul de subchei în care este împărțită cheia inițială
+Speck is an ARX (Addition, Rotation, XOR) type block cipher. 
+* **word size** = 16 bits
+* **block** = $(L,R)$ = the encrypted word (which has 32 bits) is divided into two 16-bit subwords
+* **key** = 64-bit number
+* **rotations** = number of bits rotated to the right or left in the encryption function (default values are $\alpha = 7$ for right rotation on $L$ and $\beta = 2$ for left rotation on $R$)
+* **number of rounds** = number of subkeys the initial key is divided into
 
-### Funcția de criptare
+### Encryption function
 
-Definim:
-* $ROR(L,\alpha)$ rotația la dreapta în $L$ cu $\alpha$ biți
-* $ROL(R,\beta)$ rotația la stânga în $R$ cu $\beta$ biți
-* $K_i$ subcheia rundei $i$, derivată din cheia inițială, având lungimea exactă de $w$ biți
-* $\oplus$ operația $XOR$ pe biți
+Let us define:
+* $ROR(L,\alpha)$ right rotation in $L$ by $\alpha$ bits
+* $ROL(R,\beta)$ left rotation in $R$ by $\beta$ bits
+* $K_i$ subkey of round $i$, derived from the initial key, having an exact length of $w$ bits
+* $\oplus$ bitwise $XOR$ operation
 
-Acum, pentru **criptarea** mesajului folosim:
+Now, for the **encryption** of the message we use:
 
 $$f(L,R) = (L',R')$$
 
-unde:
+where:
 
 $$L' = ((ROR(L,\alpha) + R) \bmod 2^{w}) \oplus K_i$$
 
 $$R' = ROL(R,\beta) \oplus L'$$
 
-Pentru **decriptare** folosim inversa funcției $f$:
+For **decryption** we use the inverse of function $f$:
 
 $$f^{-1}(L',R') = (L,R)$$
 
-unde:
+where:
 
 $$R = ROR(R' \oplus L', \beta)$$
 
 $$L = ROL(((L' \oplus K_i) - R) \bmod 2^{w}, \alpha)$$
 
-## Atacul pentru decriptare
+## The Decryption Attack
 
-Atacatorul vede ciphertexte criptate în același mod, fără a cunoaște cheia folosită pentru criptarea lor. El vrea să găsească ultima subcheie cu care s-a criptat un mesaj. Odată ce găsește ultima cheie, repetă procesul până descoperă toată cheia secretă. Toate metricile de evaluare prezentate vor reflecta capacitatea algoritmilor de a returna această ultimă subcheie.
+The attacker observes ciphertexts encrypted in the same way, without knowing the key used for their encryption. The attacker aims to find the last subkey used to encrypt a message. Once the last key is found, the process is repeated until the entire secret key is discovered. All evaluation metrics presented will reflect the algorithms' capacity to return this last subkey.
 
-### Rețeaua neuronală convoluțională (CNN)
+### Convolutional Neural Network (CNN)
 
-#### Definirea problemei
-Construim o rețea neuronală convoluțională (CNN) care are rolul de *neural distinguisher*. Rețeaua va returna o probabilitate $p \in [0, 1]$ pentru a răspunde la întrebarea: "Provine perechea de texte cifrate $(C_1, C_2)$ din criptarea a două texte clare care respectă o anumită diferență fixă?”. În mod complementar, $1-p$ va reprezenta probabilitatea ca perechea respectivă să fie formată din secvențe de biți complet aleatoare.
+#### Problem Definition
+We construct a convolutional neural network (CNN) that acts as a *neural distinguisher*. The network will return a probability $p \in [0, 1]$ to answer the question: "Does the ciphertext pair $(C_1, C_2)$ originate from the encryption of two plaintexts that respect a certain fixed difference?". Complementarily, $1-p$ will represent the probability that the respective pair is formed by completely random bit sequences.
 
-#### Generarea datelor de antrenare
-Pentru a antrena rețeaua folosim perechi de texte clare care diferă printr-o valoare fixă XOR, notată $\Delta P = (\Delta L, \Delta R)$. Procesul de generare a datelor pozitive (reale) presupune criptarea acestor perechi:
+#### Training Data Generation
+To train the network, we use plaintext pairs that differ by a fixed XOR value, denoted $\Delta P = (\Delta L, \Delta R)$. The process of generating positive (real) data involves encrypting these pairs:
 
 $$(L,R) \xrightarrow{encrypt} C_1$$
 
 $$(L\oplus \Delta L, R\oplus \Delta R) \xrightarrow{encrypt} C_2$$
 
-Astfel, un eșantion valid pentru rețea va fi format din combinarea perechilor de texte cifrate obținute: $(C_1, C_2)$. Setul de date complet este obținut echilibrând clasele: o jumătate este formată din exemple pozitive (perechi reale de criptare cu diferența dată), iar cealaltă jumătate din exemple negative (în care al doilea text cifrat $C_2$ este înlocuit cu o valoare generată uniform aleator).
+Thus, a valid sample for the network will be formed by combining the obtained ciphertext pairs: $(C_1, C_2)$. The complete dataset is obtained by balancing the classes: half consists of positive examples (real encryption pairs with the given difference), and the other half consists of negative examples (where the second ciphertext $C_2$ is replaced with a uniformly generated random value).
 
-#### Arhitectura rețelei
-Arhitectura propusă este o rețea convoluțională reziduală formată dintr-un residual tower și un prediction head, arhitectură ce a fost simplificată și îmbunătățită pentru a reduce numărul de parametri fără pierderea acurateței.
+#### Network Architecture
 
-**Structura Straturilor**
-* **Input:** Un tensor tridimensional cu 3 canale, corespunzător caracteristicilor extrase din perechea $(C_1, C_2)$. Dimensiunea spațială este de 16 biți (conform arhitecturii Speck32/64).
-* **Blocul rezidual:** Rețeaua integrează *depth* blocuri reziduale succesive. Fiecare bloc efectuează:
-    * `Conv1d` (extindere de la 3 la 32 de canale, kernel = 3, padding = 1).
-    * `BatchNorm1d` urmat de funcția de activare neliniară `ReLU`.
-    * `Conv1d` (contractare de la 32 înapoi la 3 canale, kernel = 3, padding = 1).
-    * `BatchNorm1d` urmat de `ReLU`.
-    * O conexiune reziduală care adună intrarea originală a blocului la ieșirea acestuia, pentru a preveni vanishing gradient.
-* **Prediction head**: Ieșirea turnului rezidual, de formă $(3, 16)$, este aplatizată într-un vector de 48 de elemente și trecută prin straturi fully connected:
-    * `Linear` (48 $\rightarrow$ 64 de neuroni), `BatchNorm1d`, `ReLU`.
-    * `Linear` (64 $\rightarrow$ 64 de neuroni), `BatchNorm1d`, `ReLU`.
-    * `Linear` (64 $\rightarrow$ 1 neuron), urmat de funcția `Sigmoid` pentru a mapa ieșirea în probabilitatea binară dorită.
+The proposed architecture is a residual convolutional network consisting of a residual tower and a prediction head, an architecture that was simplified and improved to reduce the number of parameters without losing accuracy.
 
-#### Parametrii și strategia de antrenare
-Vom antrena modele pentru 5, 6 (având *depth* $= 10$) și 7 runde de criptare (având *depth* $= 1$), iar procesul de antrenare utilizează următoarea configurație hiperparametrică:
-* **Funcția de pierdere (*Loss*):** Eroarea pătratică medie (`MSELoss`).
-* **Optimizator:** `Adam`, cu o regularizare $L2$ și weight decay de $10^{-5}$.
-* **Rata de învățare:** Planificator dinamic de tip `OneCycleLR`, cu o rată maximă de $10^{-3}$.
-* **Setul de date:** $10^7$ eșantioane în total ($9 \cdot 10^6$ pentru antrenare, $10^6$ pentru validare).
-* **Batch size**: 5000 de exemple per lot.
-* **Durata:** Antrenarea rulează pentru 200 de epoci, reținându-se starea modelului cu cea mai bună acuratețe pe setul de validare.
+**Layer Structure**
+* **Input:** A three-dimensional tensor with 3 channels, corresponding to the features extracted from the pair $(C_1, C_2)$. The spatial dimension is 16 bits (according to the Speck32/64 architecture).
+* **Residual Block:** The network integrates *depth* successive residual blocks. Each block performs:
+    * `Conv1d` (expansion from 3 to 32 channels, kernel = 3, padding = 1).
+    * `BatchNorm1d` followed by the non-linear activation function `ReLU`.
+    * `Conv1d` (contraction from 32 back to 3 channels, kernel = 3, padding = 1).
+    * `BatchNorm1d` followed by `ReLU`.
+    * A residual connection that adds the block's original input to its output, to prevent vanishing gradients.
+* **Prediction head**: The output of the residual tower, shaped $(3, 16)$, is flattened into a 48-element vector and passed through fully connected layers:
+    * `Linear` (48 $\rightarrow$ 64 neurons), `BatchNorm1d`, `ReLU`.
+    * `Linear` (64 $\rightarrow$ 64 neurons), `BatchNorm1d`, `ReLU`.
+    * `Linear` (64 $\rightarrow$ 1 neuron), followed by the `Sigmoid` function to map the output to the desired binary probability.
 
-Timpul total de antrenare a celor 3 rețele este de aproximativ 64 de ore folosind un *CPU i7 11th gen*, un *GPU GTX 1650* (cu *4GB VRAM*) și *16 GB RAM*. Același sistem a fost folosit și pentru metodele de atac ce vor fi prezentate ulterior.
+#### Training Parameters and Strategy
 
-#### Rezultatele antrenării
-Modelul de **5 runde** are o acuratețe de 92.74%, cel de **6 runde** are 78.79 %, iar cel de **7 runde** 55.14 %.
+We will train models for 5, 6 (with *depth* $= 10$), and 7 encryption rounds (with *depth* $= 1$), and the training process uses the following hyperparameter configuration:
+* **Loss Function:** Mean Squared Error (`MSELoss`).
+* **Optimizer:** `Adam`, with an $L2$ regularization and a weight decay of $10^{-5}$.
+* **Learning Rate:** Dynamic scheduler of type `OneCycleLR`, with a maximum rate of $10^{-3}$.
+* **Dataset:** $10^7$ total samples ($9 \cdot 10^6$ for training, $10^6$ for validation).
+* **Batch size**: 5000 examples per batch.
+* **Duration:** Training runs for 200 epochs, retaining the model state with the best accuracy on the validation set.
+
+The total training time for the 3 networks is approximately 64 hours using an *11th gen i7 CPU*, a *GTX 1650 GPU* (with *4GB VRAM*), and *16 GB RAM*. The same system was used for the attack methods presented later.
+
+#### Training Results
+
+The **5-round** model has an accuracy of 92.74%, the **6-round** one has 78.79%, and the **7-round** one 55.14%.
      
-Dacă am încerca să folosim aceeași strategie de antrenare pentru modele de 8 sau mai multe runde, acuratețea va fi în jurul valorii de 50 %, deci echivalent cu alegerea aleatorie a clasei, rezultat care nu poate fi folosit de niciunul dintre algoritmii de criptanaliză prezentați mai jos.
+If we tried to use the same training strategy for models of 8 or more rounds, the accuracy would be around 50%, thus equivalent to a random class guess, a result that cannot be used by any of the cryptanalysis algorithms presented below.
 
-### Utilizarea probabilităților CNN
+### Utilizing CNN Probabilities
 
-Odată antrenat, neural distinguisher-ul (DND-ul) nu este folosit izolat, ci ca o componentă centrală în faza de recuperare a subcheii (inferența rețelei pe date parțial decriptate). În continuare, vom prezenta două metode de agregare a probabilităților pentru a determina subcheia corectă.
+Once trained, the neural distinguisher (DND) is not used in isolation, but as a central component in the subkey recovery phase (network inference on partially decrypted data). Next, we will present two methods of aggregating probabilities to determine the correct subkey.
 
 #### Sum of Logits
 
-Deoarece acuratețea rețelei pentru o singură pereche de texte cifrate este limitată, se utilizează structuri de texte cifrate generate pe baza unor biți neutri. Răspunsurile rețelei pentru toate perechile din structură sunt agregate pentru a formula un scor de încredere pentru fiecare cheie candidată.
+Because the network's accuracy for a single ciphertext pair is limited, ciphertext structures generated based on neutral bits are used. The network's responses for all pairs in the structure are aggregated to formulate a confidence score for each candidate key.
 
-**Notații:**
-* $f_0(X) = P(real|X)$: probabilitatea returnată de CNN ca datele de intrare $X$ să provină dintr-o criptare reală.
-* $X_i(K) = f^{-1}(C_i, K)$: rezultatul decriptării parțiale (cu o rundă) a perechii de texte cifrate $C_i$ folosind subcheia candidată $K$.
-* $p_i(K) = f_0(X_i(K))$: probabilitatea estimată de rețea pentru perechea $i$ decriptată cu cheia $K$.
-* $l_i(K) = \log_2\left(\frac{p_i(K)}{1-p_i(K)}\right)$: transformarea probabilității în *log-odds*.
+**Notations:**
 
-**Descriere:**
-Presupunem că dispunem de $n$ perechi de texte cifrate $(C_{i1}, C_{i2}), i=\overline{1,n}$, obținute dintr-o structură, și cunoaștem lungimea ultimei subchei. Pentru fiecare cheie candidată $K$ din spațiul de chei aferent, decriptăm parțial cele $n$ perechi. CNN-ul evaluează fiecare rezultat, oferind o probabilitate $p_i(K)$. Scorul total pentru subcheia candidată $K$ se calculează prin însumarea valorilor log-odds:
+* $f_0(X) = P(real|X)$: probability returned by the CNN that the input data $X$ originates from a real encryption.
+* $X_i(K) = f^{-1}(C_i, K)$: the result of the partial decryption (by one round) of the ciphertext pair $C_i$ using the candidate subkey $K$.
+* $p_i(K) = f_0(X_i(K))$: the probability estimated by the network for pair $i$ decrypted with key $K$.
+* $l_i(K) = \log_2\left(\frac{p_i(K)}{1-p_i(K)}\right)$: transformation of the probability into *log-odds*.
+
+**Description:**
+
+Assume we have $n$ ciphertext pairs $(C_{i1}, C_{i2}), i=\overline{1,n}$, obtained from a structure, and we know the length of the last subkey. For each candidate key $K$ from the corresponding key space, we partially decrypt the $n$ pairs. The CNN evaluates each result, providing a probability $p_i(K)$. The total score for the candidate subkey $K$ is calculated by summing the log-odds values:
 
 $$S(K) = \sum_{i=1}^{n}\log_2\left(\frac{p_i(K)}{1-p_i(K)}\right)$$
 
-Valoarea maximă a scorului $S(K)$ va indica subcheia cea mai probabilă.
+The maximum value of the score $S(K)$ will indicate the most probable subkey.
 
-**Fundamentarea teoretică a metodei**
+**Theoretical foundation of the method**
 
-Această abordare este optimă sub două presupuneri stricte:
+This approach is optimal under two strict assumptions:
 
-* CNN-ul este *Bayes-optimal*, adică probabilitatea prezisă reflectă perfect distribuțiile reale:
+* The CNN is *Bayes-optimal*, meaning the predicted probability perfectly reflects the real distributions:
 
   $$P(real|X) = \frac{P_{real}(X)}{P_{real}(X) + P_{random}(X)}$$
   
-  unde $P_{real}(X)$ este densitatea de probabilitate sub ipoteza că intrarea provine din distribuția cifrului, iar $P_{random}(X)$ este densitatea sub ipoteza unei distribuții uniforme.
+  where $P_{real}(X)$ is the probability density under the hypothesis that the input comes from the cipher's distribution, and $P_{random}(X)$ is the density under the hypothesis of a uniform distribution.
 
-* Cele $n$ exemple decriptate parțial $X_i(K)$ sunt independente condiționat de cheia $K$.
+* The $n$ partially decrypted examples $X_i(K)$ are conditionally independent given the key $K$.
 
-Pe baza primei presupuneri, deducem că:
+Based on the first assumption, we deduce that:
 
 $$\frac{f_0(X)}{1-f_0(X)} = \frac{P_{real}(X)}{P_{random}(X)} \iff \log_2\left(\frac{f_0(X)}{1-f_0(X)}\right) = \log_2\left(\frac{P_{real}(X)}{P_{random}(X)}\right)$$
 
-Prin urmare, formula scorului devine echivalentă cu însumarea logaritmilor verosimilității (*log-likelihood*):
+Therefore, the score formula becomes equivalent to summing the log-likelihoods:
 
 $$\forall i, K: \; l_i(K) = \log_2\left(\frac{p_i(K)}{1-p_i(K)}\right) = \log_2\left(\frac{P_{real}(X_i(K))}{P_{random}(X_i(K))}\right)$$
 
-Dacă rețeaua este Bayes-optimă, maximizarea lui $S(K)$ este o decizie teoretic optimă pentru clasificarea secvențelor independente. În practică, deoarece CNN-ul este doar o aproximare a distribuției ideale, metoda oferă un doar estimator empiric, dar destul de robust având în vedere simplitatea acestui algoritm.
+If the network is Bayes-optimal, maximizing $S(K)$ is a theoretically optimal decision for classifying independent sequences. In practice, because the CNN is only an approximation of the ideal distribution, the method provides only an empirical estimator, but quite a robust one considering the simplicity of this algorithm.
 
-**Evaluarea algoritmului**
+**Algorithm Evaluation**
 
-Pentru a ataca un sistem pe $n$ runde, vom folosi modelul antrenat pe $n-1$ runde. Vom considera că atacul a avut succes doar atunci când cheia adevărată se află printre un top de 32 de chei considerate de algoritm ca fiind cele mai probabile să fie cheia reală. Astfel, avem:
+To attack an $n$-round system, we will use the model trained on $n-1$ rounds. We will consider the attack successful only when the true key is among a top 32 keys considered by the algorithm as the most probable to be the real key. Thus, we have:
 
-* Pentru atacul pe 6 runde am folosit modelul antrenat pe 5 runde și rata de succes este de 100 %, iar cheia reală se află în medie pe locul 1.50 în clasamentul cheilor date de algoritm.
-* Pentru atacul pe 7 runde am folosit modelul antrenat pe 6 runde și rata de succes este de 100 %, iar cheia reală se află în medie pe locul 1.60 în clasamentul cheilor date de algoritm.
-* Pentru atacul pe 8 runde am folosit modelul antrenat pe 7 runde și rata de succes este de 100 %, iar cheia reală se află în medie pe locul 5.10 în clasamentul cheilor date de algoritm.
+* For the 6-round attack, we used the model trained on 5 rounds and the success rate is 100%, and the real key is on average at rank 1.50 in the key ranking given by the algorithm.
+* For the 7-round attack, we used the model trained on 6 rounds and the success rate is 100%, and the real key is on average at rank 1.60 in the key ranking given by the algorithm.
+* For the 8-round attack, we used the model trained on 7 rounds and the success rate is 100%, and the real key is on average at rank 5.10 in the key ranking given by the algorithm.
 
 #### Bayesian Key Search
 
-Când decriptarea de probă se face pentru o singură rundă, ipoteza randomizării pentru chei greșite eșuează adesea, mai ales în cazul cifrurilor ușoare precum Speck32/64. Pentru a rezolva această problemă și a eficientiza căutarea, se utilizează algoritmul *Bayesian Key Search* (BKS), îmbunătățit prin preluarea și adaptarea acestuia pentru a garanta păstrarea cheilor optime.
+When trial decryption is done for a single round, the randomization hypothesis for wrong keys often fails, especially in the case of lightweight ciphers like Speck32/64. To solve this problem and streamline the search, the *Bayesian Key Search* (BKS) algorithm is used, improved by adopting and adapting it to guarantee the retention of optimal keys.
 
-**Precalcularea profilului (WKRP)**
-Se generează un profil al răspunsului rețelei pentru chei greșite (WKRP - *Wrong Key Response Profile*). Pentru diverse diferențe dintre cheia reală și cheia de test ($\Delta k = k_i \oplus k$), se evaluează textele cifrate decriptate parțial. Transformând rezultatele DND în log-odds, obținem media $\mu_{\Delta k}$ și deviația standard $\sigma_{\Delta k}$ pentru fiecare diferență $\Delta k$ posibilă.
+**Profile Precalculation (WKRP)**
 
-**Algoritmul de căutare iterativă**
-Spre deosebire de forța brută (evaluarea întregului spațiu de chei), algoritmul BKS îmbunătățit execută $\ell$ iterații pentru a rafina succesiv un set restrâns de candidați. Procesul constă în următorii pași:
+A profile of the network's response for wrong keys (WKRP - *Wrong Key Response Profile*) is generated. For various differences between the real key and the test key ($\Delta k = k_i \oplus k$), the partially decrypted ciphertexts are evaluated. Transforming the DND results into log-odds, we obtain the mean $\mu_{\Delta k}$ and standard deviation $\sigma_{\Delta k}$ for each possible difference $\Delta k$.
 
-1. Se pornește cu un set $S$ format din $n_{cand}$ chei candidate. Pentru a preveni pierderea cheii reale din cauza fluctuațiilor statistice, dacă există o cheie optimă globală determinată în pașii sau loturile anterioare ($K_{best}$), aceasta este reținută forțat în setul curent de candidați.
-2. Pentru fiecare cheie candidată $k_i \in S$ și fiecare pereche de texte cifrate $j$ din structură, decriptăm o rundă, trecem rezultatul prin DND pentru a obține probabilitatea $v_{j,k_i}$, iar apoi calculăm log-odds:
+**Iterative Search Algorithm**
+
+Unlike brute force (evaluating the entire key space), the improved BKS algorithm executes $\ell$ iterations to successively refine a restricted set of candidates. The process consists of the following steps:
+
+1. It starts with a set $S$ consisting of $n_{cand}$ candidate keys. To prevent losing the real key due to statistical fluctuations, if there is a global optimal key determined in previous steps or batches ($K_{best}$), it is forcibly retained in the current candidate set.
+2. For each candidate key $k_i \in S$ and each ciphertext pair $j$ from the structure, we decrypt one round, pass the result through the DND to obtain the probability $v_{j,k_i}$, and then calculate the log-odds:
    
    $$z_{j,k_i} = \log_2\left(\frac{v_{j,k_i}}{1-v_{j,k_i}}\right)$$
 
-3. Se calculează scorul mediu log-odds pentru fiecare cheie candidată $k_i$:
+3. Calculate the mean log-odds score for each candidate key $k_i$:
    
    $$m_{k_i} = \frac{1}{n_{cts}}\sum_{j=0}^{n_{cts}-1}z_{j,k_i}$$
 
-4. Parcurgând întreg spațiul de chei posibile $k \in \mathcal{K}$, se calculează un scor de penalizare $\lambda(k)$, reprezentând distanța euclidiană ponderată:
+4. Iterating through the entire space of possible keys $k \in \mathcal{K}$, a penalty score $\lambda(k)$ is calculated, representing the weighted Euclidean distance:
    
    $$\lambda(k) = \sum_{i=0}^{n_{cand}-1}\frac{(m_{k_i}-\mu_{k_i\oplus k})^2}{\sigma_{k_i\oplus k}^2}$$
 
-5. Se actualizează setul $S$ reținând cele $n_{cand}$ chei $k$ care minimizează scorul $\lambda(k)$ și se trece la următoarea iterație.
+5. The set $S$ is updated by retaining the $n_{cand}$ keys $k$ that minimize the score $\lambda(k)$ and moves to the next iteration.
 
-**Fundamentarea teoretică a metodei**
-Eficiența metodei BKS se bazează pe următoarele presupuneri:
-* Mediile log-odds empirice ($m_{k_i}$) urmează o distribuție normală dictată de diferența de cheie.
-* Parametrii $\mu$ și $\sigma$ precalculați în tabelul WKRP reflectă fidel distribuția reală.
+**Theoretical foundation of the method**
 
-Considerând că media log-odds-urilor obținute cu cheia $k_i$ este distribuită normal în raport cu profilul cheii reale $k$:
+The efficiency of the BKS method relies on the following assumptions:
+* The empirical log-odds means ($m_{k_i}$) follow a normal distribution dictated by the key difference.
+* The precalculated parameters $\mu$ and $\sigma$ in the WKRP table accurately reflect the real distribution.
+
+Assuming the mean of the log-odds obtained with key $k_i$ is normally distributed relative to the real key profile $k$:
 
 $$m_{k_i} \sim \mathcal{N}(\mu_{k_i\oplus k}, \sigma_{k_i\oplus k}^2)$$
 
-Funcția de verosimilitate (*likelihood*) pentru vectorul de medii observate $m$, condiționată de cheia corectă $k$, devine:
+The likelihood function for the observed means vector $m$, conditioned on the correct key $k$, becomes:
 
 $$P(m|k) = \prod_{i=0}^{n_{cand}-1}\frac{1}{\sqrt{2\pi\sigma_{k_i\oplus k}^2}}e^{-\frac{(m_{k_i}-\mu_{k_i\oplus k})^2}{2\sigma_{k_i\oplus k}^2}}$$
 
-Aplicând teorema lui Bayes (cu o distribuție *a priori* uniformă peste spațiul cheilor $P(k)$) obținem $P(k|m) \approx P(m|k)$. Trecând în domeniul logaritmic pentru a evita instabilitatea numerică și ignorând termenii constanți, maximizarea probabilității $\log_2 P(k|m)$ devine echivalentă cu minimizarea metricii noastre de eroare $\lambda(k)$:
+Applying Bayes' theorem (with a uniform prior distribution over the key space $P(k)$) we obtain $P(k|m) \approx P(m|k)$. Transitioning to the logarithmic domain to avoid numerical instability and ignoring constant terms, maximizing the probability $\log_2 P(k|m)$ becomes equivalent to minimizing our error metric $\lambda(k)$:
 
 $$\lambda(k) = \sum_{i=0}^{n_{cand}-1}\frac{(m_{k_i}-\mu_{k_i\oplus k})^2}{\sigma_{k_i\oplus k}^2}$$
 
-**Evaluarea algoritmului**
+**Algorithm Evaluation**
 
-Am folosit aceeași metodă de evaluare ca pentru *Sum of logits* și am obținut următoarele rezultate:
+We used the same evaluation method as for *Sum of logits* and obtained the following results:
 
-* Pentru atacurile pe 6 și 7 runde am obținut o rată de succes de 100 %, iar cheia adevărată este mereu prima în topul cheilor returnate de algoritm.
-* Pentru atacul pe 8 runde, rata de succes este de 20 %, iar cheia reală este, în medie, pe locul 2.50.
+* For the 6 and 7-round attacks, we obtained a 100% success rate, and the true key is always first in the top keys returned by the algorithm.
+* For the 8-round attack, the success rate is 20%, and the real key is, on average, at rank 2.50.
 
-### Ajustarea fină a modelului (*Fine-Tuning* cu exemple dificile)
+### Fine-Tuning the Model (with hard negative examples)
 
-Deși rețeaua neuronală descrisă anterior obține o acuratețe ridicată pe setul de date standard, performanța acesteia poate scădea în faza de atac (la recuperarea cheii). În generarea datelor standard, exemplele negative sunt create prin înlocuirea unui text cifrat valid cu date complet aleatoare. Totuși, în practică, în timpul atacului, rețeaua evaluează texte cifrate care au fost decriptate cu o subcheie candidată greșită. Aceste decriptări eronate nu produc un zgomot perfect aleator, ci păstrează anumite corelații structurale specifice cifrului, fenomen care slăbește distincția modelului. Pentru a rezolva această problemă, vom face un fine-tuning al modelului folosind exemple negative dificile. 
+Although the neural network described earlier achieves high accuracy on the standard dataset, its performance can decrease during the attack phase (at key recovery). In standard data generation, negative examples are created by replacing a valid ciphertext with completely random data. However, in practice, during the attack, the network evaluates ciphertexts that have been decrypted with a wrong candidate subkey. These erroneous decryptions do not produce perfectly random noise but retain certain structural correlations specific to the cipher, a phenomenon that weakens the model's distinction capabilities. To solve this problem, we will fine-tune the model using hard negative examples. 
 
-**Generarea exemplelor negative dificile**
+**Generating hard negative examples**
 
-Când generăm aceste exemple, vom simula exact scenariul întâlnit la căutarea cheii, urmărind următorii pași:
+When generating these examples, we will simulate exactly the scenario encountered during the key search, following these steps:
 
-* Se generează și se criptează perechi de texte pentru $R$ runde folosind cheile corecte.
-* Pentru un eșantion negativ, perechea obținută este criptată încă o rundă folosind subcheia corectă. Imediat după, perechea este decriptată o rundă, dar de această dată folosind o subcheie aleatoare.
+* Generate and encrypt text pairs for $R$ rounds using the correct keys.
+* For a negative sample, the obtained pair is encrypted for one more round using the correct subkey. Immediately after, the pair is decrypted for one round, but this time using a random subkey.
 
-Astfel, obținem un set de date care imită mai bine scenariile pe care modelul le va întâlni la inferență.
+Thus, we obtain a dataset that better mimics the scenarios the model will encounter during inference.
 
-#### Rezultatele fine-tuning-ului
+#### Fine-Tuning Results
 
-Am antrenat modelele pentru încă 20 de epoci folosind astfel de exemple negative, astfel crescând acuratețea lor pentru perechi de acest tip cu aproximativ 1%.
+We trained the models for another 20 epochs using such negative examples, thus increasing their accuracy for pairs of this type by approximately 1%.
 
-### Modele propuse și algoritmi hibrizi
-Pentru a maximiza atât viteza de execuție, cât și rata de succes a atacului de decriptare, am implementat și evaluat o serie de strategii derivate. Acestea pleacă de la utilizarea directă a modelului fine-tuned și ajung până la algoritmi hibrizi. Algoritmii hibrizi combină avantajele de pre-filtrare ale metodei *Sum of Logits* (SoL) cu precizia rafinată a *Bayesian Key Search* (BKS), utilizând simultan cele două tipuri de rețele neuronale: modelul de bază (antrenat standard) și modelul cu ajustare fină (*fine-tuned*, notat FT).
+### Proposed Models and Hybrid Algorithms
+To maximize both execution speed and decryption attack success rate, we implemented and evaluated a series of derived strategies. These range from the direct use of the fine-tuned model to hybrid algorithms. The hybrid algorithms combine the pre-filtering advantages of the *Sum of Logits* (SoL) method with the refined precision of the *Bayesian Key Search* (BKS), simultaneously using the two types of neural networks: the base model (standard trained) and the fine-tuned model (denoted FT).
 
-Aceste strategii pot fi clasificate astfel:
+These strategies can be classified as follows:
 
 * **Fine-Tuned BKS (FT BKS):**
-  Această abordare reprezintă o îmbunătățire directă a algoritmului de bază. Execută algoritmul Bayesian Key Search pe întreg spațiul de chei ($2^{16} = 65536$ posibilități), dar folosește exclusiv modelul FT și profilul WKRP corespunzător acestuia, înlocuind modelul de bază.
+  This approach represents a direct improvement of the base algorithm. It executes the Bayesian Key Search algorithm over the entire key space ($2^{16} = 65536$ possibilities) but uses exclusively the FT model and its corresponding WKRP profile, replacing the base model.
 
 * **SoL $\rightarrow$ Original BKS:**
-  Evaluarea întregului spațiu de chei folosind direct BKS este o operațiune costisitoare computațional. Prin această metodă hibridă, utilizăm inițial tehnica SoL pe modelul de bază pentru a aproxima foarte rapid și a extrage doar un top restrâns de candidați (64 de chei). Setul obținut devine spațiul de căutare exclusiv pentru algoritmul BKS original, reducând masiv timpul de execuție, limitând în același timp numărul de candidați eronați care ar fi putut cauza rezultate fals-pozitive.
+  Evaluating the entire key space directly using BKS is a computationally expensive operation. Through this hybrid method, we initially use the SoL technique on the base model to approximate very quickly and extract only a narrow top of candidates (64 keys). The resulting set becomes the exclusive search space for the original BKS algorithm, massively reducing execution time while limiting the number of erroneous candidates that could have caused false-positive results.
 
 * **SoL $\rightarrow$ Fine-Tuned BKS:**
-  Această tehnică respectă același principiu de restrângere a spațiului de căutare. După identificarea celor mai probabile 64 de chei folosind SoL și modelul de bază, rafinarea finală se face aplicând BKS exclusiv cu modelul FT. Metoda combină capacitatea de generalizare a modelului de bază cu acuratețea superioară a modelului FT în fața exemplelor negative dificile.
+  This technique respects the same principle of restricting the search space. After identifying the 64 most probable keys using SoL and the base model, the final refinement is done by applying BKS exclusively with the FT model. The method combines the generalization capability of the base model with the superior accuracy of the FT model when facing hard negative examples.
 
 * **Ensemble BKS:**
-  În cadrul acestei implementări de tip BKS, în locul inferenței pe un single model, neural distinguisher-ul acționează ca un ansamblu format din ambele modele (cel standard și cel FT). Răspunsurile acestora sunt ponderate pe baza inversului pătratelor funcției de pierdere obținute în procesul de validare:
+  Within this BKS-type implementation, instead of inference on a single model, the neural distinguisher acts as an ensemble formed by both models (the standard one and the FT one). Their responses are weighted based on the inverse squares of the loss function obtained in the validation process:
   
   $$w_i = \frac{1}{\text{loss}_i^2}, \quad i \in \{1, 2\}$$
   
-  Ponderile normalizate devin astfel:
+  The normalized weights thus become:
   
   $$\alpha_1 = \frac{w_1}{w_1 + w_2}, \quad \alpha_2 = \frac{w_2}{w_1 + w_2}$$
   
-  Probabilitatea agregată finală ($p_{final}$), care va fi ulterior transformată în log-odds pentru algoritmul bayesian, rezultă din suma ponderată a probabilităților individuale prezise de cele două modele:
+  The final aggregated probability ($p_{final}$), which will later be transformed into log-odds for the Bayesian algorithm, results from the weighted sum of the individual probabilities predicted by the two models:
   
   $$p_{final} = \alpha_1 \cdot p_{base} + \alpha_2 \cdot p_{FT}$$
 
 * **SoL $\rightarrow$ Ensemble BKS:**
-  Cea mai complexă arhitectură hibridă testează toate cele 65536 de chei folosind SoL și modelul de bază, iar cele 64 de chei care supraviețuiesc acestei etape de pre-filtrare sunt transmise mai departe către modelul de căutare *Ensemble BKS* pentru determinarea optimului global.
+  The most complex hybrid architecture tests all 65536 keys using SoL and the base model, and the 64 keys that survive this pre-filtering stage are passed on to the *Ensemble BKS* search model to determine the global optimum.
 
-### Optimizarea algoritmului BKS
+### Optimizing the BKS Algorithm
 
-Deși algoritmul BKS aduce îmbunătățiri majore în rata de succes a recuperării cheii, calculul inițial al profilului WKRP (*Wrong Key Response Profile*) este o operațiune extrem de costisitoare din punct de vedere computațional. Pentru a construi acest profil de distribuții, rețeaua neuronală trebuie să evalueze milioane de perechi de texte cifrate pentru absolut toate cele $2^{16} = 65536$ de diferențe posibile de cheie ($\Delta k$). Pentru că acest profil rămâne identic pentru orice atac făcut de același model pe același număr de runde, am implementat un mecanism de caching offline. În loc să recalculăm profilul pentru fiecare nouă instanță sau scenariu de atac, tabelele WKRP (vectorii de medii $\mu$ și deviații standard $\sigma$) sunt generate o singură dată pentru fiecare model antrenat (atât cel de bază, cât și cel fine-tuned) și sunt serializate pe disc sub formă de fișiere. În faza de atac propriu-zisă doar se încarcă profilul în VRAM, operație mult mai rapidă decât calcularea profilul, dar și decât algoritmul *sum of logits* pentru care o astfel de precalculare este imposibilă.
+Although the BKS algorithm brings major improvements in the key recovery success rate, the initial calculation of the WKRP (*Wrong Key Response Profile*) is a computationally highly expensive operation. To build this profile of distributions, the neural network must evaluate millions of ciphertext pairs for absolutely all $2^{16} = 65536$ possible key differences ($\Delta k$). Because this profile remains identical for any attack made by the same model on the same number of rounds, we implemented an offline caching mechanism. Instead of recalculating the profile for each new instance or attack scenario, the WKRP tables (vectors of means $\mu$ and standard deviations $\sigma$) are generated only once for each trained model (both the base and the fine-tuned one) and are serialized to disk as files. In the actual attack phase, the profile is simply loaded into VRAM, an operation much faster than calculating the profile, and also faster than the *sum of logits* algorithm for which such precalculation is impossible.
 
-Astfel, algoritmul BKS rulează inferența rețelei neuronale exclusiv pentru un set activ foarte mic de chei candidate ( $n_{cand} = 64$). Pentru a explora și a evalua restul spațiului de $65536$ de chei, BKS **nu** mai apelează rețeaua neuronală. În schimb, folosește valorile $\mu$ și $\sigma$ din cache-ul WKRP pentru a calcula distanța euclidiană ponderată $\lambda(k)$:
+Thus, the BKS algorithm runs the neural network inference exclusively for a very small active set of candidate keys ($n_{cand} = 64$). To explore and evaluate the rest of the 65536 key space, BKS **no longer** calls the neural network. Instead, it uses the $\mu$ and $\sigma$ values from the WKRP cache to calculate the weighted Euclidean distance $\lambda(k)$:
 
 $$\lambda(k) = \sum_{i=0}^{n_{cand}-1}\frac{(m_{k_i}-\mu_{k_i\oplus k})^2}{\sigma_{k_i\oplus k}^2}$$
 
-Această evaluare bayesiană se reduce la operații matematice vectorizate elementare pe tensori, care sunt executate aproape instant pe arhitectura masiv paralelă a unui GPU, ocolind complet necesitatea unor noi inferențe cu CNN-ul.
+This Bayesian evaluation is reduced to elementary vectorized mathematical operations on tensors, which are executed almost instantly on the massively parallel architecture of a GPU, completely bypassing the need for new inferences with the CNN.
 
-## Evaluarea și rezultatele metodelor de criptanaliză
+## Evaluation and Results of Cryptanalysis Methods
 
-Pentru a compara eficiența metodelor propuse, evaluarea a fost realizată printr-un cadru de testare automatizat care simulează scenarii de atac pe 6, 7 și 8 runde. 
+To compare the efficiency of the proposed methods, the evaluation was carried out through an automated testing framework that simulates attack scenarios on 6, 7, and 8 rounds. 
 
-### Metodologia de evaluare
-Procesul de evaluare funcționează printr-o buclă continuă, în care fiecare iterație reprezintă o nouă provocare. Pentru fiecare provocare sunt generați următorii parametri:
-* O subcheie țintă generată aleatoriu, reprezentând obiectivul atacului ce trebuie recuperat.
-* Un număr specific de structuri de texte clare și cifrate: 32 de structuri pentru atacul pe 6 runde, 64 de structuri pentru 7 runde și 128 de structuri pentru 8 runde.
+### Evaluation Methodology
+The evaluation process works through a continuous loop, where each iteration represents a new challenge. For each challenge, the following parameters are generated:
+* A randomly generated target subkey, representing the attack objective to be recovered.
+* A specific number of plaintext and ciphertext structures: 32 structures for the 6-round attack, 64 structures for 7 rounds, and 128 structures for 8 rounds.
 
-În cadrul fiecărei iterații, textele cifrate sunt transmise secvențial către șase metode distincte de recuperare a cheii:
-1. **M1 (Original BKS):** Metoda de bază, folosind algoritmul BKS cu modelul antrenat standard.
-2. **M2 (Fine-Tuned BKS):** Algoritmul BKS evaluat exclusiv cu modelul fine-tuned.
-3. **M3 (SoL $\rightarrow$ Original BKS):** Reducerea spațiului de căutare la 64 de candidați folosind metoda *Sum of Logits* (SoL) și evaluarea acestora cu BKS-ul original.
-4. **M4 (SoL $\rightarrow$ Fine-Tuned BKS):** Reducerea spațiului prin SoL, urmată de evaluarea BKS folosind modelul ajustat fin.
-5. **M5 (Ensemble BKS):** Algoritmul BKS utilizând un ansamblu format din ambele modele (standard și ajustat).
-6. **M6 (SoL $\rightarrow$ Ensemble BKS):** Spațiu redus prin SoL la primele 64 de chei, evaluat ulterior cu metoda Ensemble BKS.
+In each iteration, the ciphertexts are sequentially passed to six distinct key recovery methods:
+1. **M1 (Original BKS):** The base method, using the BKS algorithm with the standard trained model.
+2. **M2 (Fine-Tuned BKS):** The BKS algorithm evaluated exclusively with the fine-tuned model.
+3. **M3 (SoL $\rightarrow$ Original BKS):** Reducing the search space to 64 candidates using the *Sum of Logits* (SoL) method and evaluating them with the original BKS.
+4. **M4 (SoL $\rightarrow$ Fine-Tuned BKS):** Search space reduction through SoL, followed by BKS evaluation using the fine-tuned model.
+5. **M5 (Ensemble BKS):** The BKS algorithm using an ensemble formed by both models (standard and fine-tuned).
+6. **M6 (SoL $\rightarrow$ Ensemble BKS):** Space reduced through SoL to the top 64 keys, subsequently evaluated with the Ensemble BKS method.
 
-### Metrici înregistrate și criteriul de oprire
-Pentru fiecare metodă și fiecare provocare, algoritmul măsoară timpul de execuție și verifică dacă subcheia prezisă se potrivește perfect cu subcheia țintă reală. Pe baza acestor date, se calculează și se actualizează dinamic acuratețea globală (numărul de predicții corecte raportat la numărul total de rulări) și timpul mediu de execuție. Spre deosebire de evaluările anterioare, vom considera că atacul a avut succes doar dacă cheia corectă este prima în topul cheilor prezise de algoritm. Astfel, acuratețea va fi considerabil mai mică decât în analiza anterioară.
+### Recorded Metrics and Stopping Criterion
 
-Pentru a asigura o evaluare relevantă din punct de vedere statistic, mediul de testare impune un număr de minimum 10 rulări înainte de a verifica vreo condiție de dominanță. Bucla infinită de evaluare se oprește doar în momentul în care cel puțin una dintre metodele propuse (M2 -- M6) demonstrează o dominanță clară asupra metodei de bază (M1). Această dominanță este definită prin îndeplinirea uneia dintre următoarele două condiții:
-* **Acuratețe superioară:** Acuratețea metodei propuse este strict mai mare decât acuratețea metodei de bază (M1).
-* **Dominanță la viteză:** Metoda propusă obține o acuratețe mai mare sau egală cu cea a metodei M1 (ambele având o acuratețe strict mai mare ca 0), dar înregistrează un timp mediu de execuție strict mai mic.
+For each method and each challenge, the algorithm measures the execution time and verifies if the predicted subkey perfectly matches the real target subkey. Based on this data, the overall accuracy (number of correct predictions divided by the total number of runs) and the average execution time are dynamically calculated and updated. Unlike previous evaluations, we will consider the attack successful only if the correct key is the first in the top keys predicted by the algorithm. Thus, the accuracy will be considerably lower than in the previous analysis.
 
-În momentul în care oricare dintre aceste criterii de succes este atins, rularea scenariului se oprește, mediul afișează rezumatul final cu timpii și acuratețile tuturor celor 6 metode, iar întregul istoric al seturilor de date aferente (până la o limită fixă de 1000 de provocări) este salvat automat pe disc.
+To ensure a statistically relevant evaluation, the testing environment requires a minimum of 10 runs before verifying any dominance condition. The infinite evaluation loop stops only when at least one of the proposed methods (M2 - M6) demonstrates a clear dominance over the base method (M1). This dominance is defined by meeting one of the following two conditions:
+* **Superior accuracy:** The accuracy of the proposed method is strictly higher than the accuracy of the base method (M1).
+* **Speed dominance:** The proposed method achieves an accuracy greater than or equal to that of method M1 (both having an accuracy strictly greater than 0), but records a strictly lower average execution time.
 
-### Rezultatele atacurilor
+The moment either of these success criteria is met, the scenario run stops, the environment displays the final summary with the times and accuracies of all 6 methods, and the entire history of the associated datasets (up to a fixed limit of 1000 challenges) is automatically saved to disk.
 
-Pentru a valida performanța metodelor propuse, bucla de testare a fost rulată pentru cele trei scenarii distincte de atac (6, 7 și 8 runde). În toate cele trei cazuri, algoritmii hibrizi și cei bazați pe modelul fine-tuned au demonstrat o superioritate clară față de metoda originală de referință (M1 - Orig BKS), rezultatele menținând un tipar consistent de dominanță. Această metodă de evaluare fiind constructivă, am găsit și un set de date în care cel puțin unul dintre algoritmii propuși este mai performant decât algoritmul de referință.
+### Attack Results
 
-#### Analiza acurateței
-În primele două scenarii de atac (6 și 7 runde), metodele M2 (FT BKS), M4 (SoL $\rightarrow$ FT BKS) și M5 (Ensemble BKS) au atins rapid o acuratețe de 100\%, depășind performanța de 90\% a algoritmului de bază (M1). Mai mult, în cel de-al treilea scenariu (8 runde), considerat un caz extrem din cauza degradării probabilităților și a zgomotului masiv din date, metodele pur bayesiene (M1, M2, M5) au înregistrat o rată de succes de 0\%. În contrast direct, metodele care folosesc *Sum of Logits* pentru pre-filtrare (M3, M4, M6) au reușit să recupereze cheia corectă în 20\% din cazuri, demonstrând o robustețe net superioară a arhitecturilor hibride.
+To validate the performance of the proposed methods, the testing loop was run for the three distinct attack scenarios (6, 7, and 8 rounds). In all three cases, the hybrid algorithms and those based on the fine-tuned model demonstrated clear superiority over the original reference method (M1 - Orig BKS), with the results maintaining a consistent pattern of dominance. Since this evaluation method is constructive, we also found a dataset where at least one of the proposed algorithms is more performant than the reference algorithm.
 
-#### Analiza timpului de execuție
-Diferențele masive ale timpului de execuție confirmă avantajul teoretic al mecanismului de caching offline explicat anterior. Metodele BKS directe (M1 și M2) sunt extrem de rapide, finalizând o provocare în sub o secundă (în medie 0.54s -- 0.78s). Metoda M5 (*Ensemble BKS*) necesită aproximativ dublul acestui timp (1.06s -- 1.52s), o creștere logică și eficientă, având în vedere că prelucrează simultan răspunsurile a două rețele neuronale diferite. 
+#### Accuracy Analysis
+In the first two attack scenarios (6 and 7 rounds), methods M2 (FT BKS), M4 (SoL $\rightarrow$ FT BKS), and M5 (Ensemble BKS) quickly reached a 100% accuracy, surpassing the 90% performance of the base algorithm (M1). Moreover, in the third scenario (8 rounds), considered an extreme case due to probability degradation and massive noise in the data, the pure Bayesian methods (M1, M2, M5) recorded a 0% success rate. In direct contrast, methods using *Sum of Logits* for pre-filtering (M3, M4, M6) managed to recover the correct key in 20% of cases, demonstrating the vastly superior robustness of hybrid architectures.
 
-Pe de altă parte, metodele care integrează componenta SoL (M3, M4, M6) sunt constrânse de necesitatea de a efectua inferența CNN pe întregul spațiu de 65536 de chei. Acest aspect duce la timpi de execuție semnificativ mai mari, cuprinși între 155 și 342 de secunde per provocare, ilustrând perfect compromisul viteză-complexitate, dar cu o performanță mai ridicată în unele cazuri.
-În al doilea rând, optimizarea prin caching offline a profilului WKRP elimină necesitatea inferenței repetate, transformând algoritmul *Bayesian Key Search* (BKS) într-un proces mult mai rapid decât abordarea clasică *Sum of Logits* (SoL).
+#### Execution Time Analysis
+The massive differences in execution time confirm the theoretical advantage of the offline caching mechanism explained earlier. Direct BKS methods (M1 and M2) are extremely fast, completing a challenge in under a second (averaging 0.54s - 0.78s). Method M5 (*Ensemble BKS*) requires approximately double this time (1.06s - 1.52s), a logical and efficient increase considering it simultaneously processes the responses of two different neural networks. 
 
-Principala contribuție o reprezintă algoritmii hibrizi propuși (M2 -- M6), care oferă un compromis ideal între viteză și acuratețe. Pentru atacuri pe 6 și 7 runde, metodele *FT BKS* și *Ensemble BKS* obțin o acuratețe de 100\% într-un timp de maxim 2 secunde. Pentru scenariul de 8 runde, unde metodele clasice eșuează complet (0\% succes) pe setul de date găsit, utilizarea pre-filtrării SoL combinată cu analiza *Ensemble* a reprezentat singura soluție viabilă, recuperând cheia în 20\% din cazuri.
+On the other hand, methods integrating the SoL component (M3, M4, M6) are constrained by the necessity to perform CNN inference across the entire 65536 key space. This aspect leads to significantly higher execution times, ranging between 155 and 342 seconds per challenge, perfectly illustrating the speed-complexity tradeoff, albeit with higher performance in some cases.
+
+Secondly, optimizing through offline caching of the WKRP profile eliminates the need for repeated inference, transforming the *Bayesian Key Search* (BKS) algorithm into a much faster process than the classic *Sum of Logits* (SoL) approach.
+
+The main contribution is represented by the proposed hybrid algorithms (M2 - M6), which offer an ideal tradeoff between speed and accuracy. For 6 and 7-round attacks, the *FT BKS* and *Ensemble BKS* methods achieve 100% accuracy in a maximum time of 2 seconds. For the 8-round scenario, where classical methods fail completely (0% success) on the dataset found, the use of SoL pre-filtering combined with *Ensemble* analysis represented the only viable solution, recovering the key in 20% of cases.
