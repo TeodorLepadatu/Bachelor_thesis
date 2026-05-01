@@ -515,9 +515,7 @@ if __name__ == "__main__":
         6: {"dist_rounds": 6, "attack_rounds": 7, "depth": 10, "n_structures": 64, "loss_base": 0.14628,
             "loss_ft": 0.14793},
         7: {"dist_rounds": 7, "attack_rounds": 8, "depth": 1, "n_structures": 128, "loss_base": 0.24574,
-            "loss_ft": 0.24575},
-        8: {"dist_rounds": 8, "attack_rounds": 9, "depth": 1, "n_structures": 256, "loss_base": 0.25000,
-            "loss_ft": 0.25000}
+            "loss_ft": 0.24575}
     }
 
     for r in SCENARIOS:
