@@ -219,7 +219,7 @@ Direct BKS methods (M1, M2) finish under a second. M5 takes roughly double. Meth
 
 ## 5. Conclusions and Future Research Directions
 
-This paper demonstrates the efficiency of convolutional neural networks in the cryptanalysis of the Speck 32/64 cipher. The source code developed for training the models and the algorithm evaluation framework is publicly available on GitHub at: https://github.com/TeodorLepadatu/Bachelor_thesis.
+This paper demonstrates the efficiency of convolutional neural networks in the cryptanalysis of the Speck 32/64 cipher.
 
 Fine-tuning on hard negative examples is essential for eliminating false correlations. Furthermore, offline caching of the WKRP profile eliminates the need for repeated inferences, making BKS vastly faster than standard SoL approaches. The primary contribution lies in the proposed hybrid algorithms (M2–M6) which provide an ideal compromise between speed and accuracy, successfully recovering keys even at 8 rounds where traditional models fail.
 
